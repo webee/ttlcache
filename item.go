@@ -6,46 +6,44 @@ import (
 )
 
 const (
-	ItemNotExpire           time.Duration = -1
-	ItemExpireWithGlobalTTL time.Duration = 0
+	entryNotExpire           time.Duration = -1
+	entryExpireWithGlobalTTL time.Duration = 0
 )
 
-func newItem(key string, data interface{}, ttl time.Duration) *item {
-	item := &item{
-		data: data,
-		ttl:  ttl,
-		key:  key,
+func newEntry(key string, content interface{}, ttl time.Duration) *entry {
+	e := &entry{
+		content: content,
+		ttl:     ttl,
+		key:     key,
 	}
-	item.touch()
-	return item
+	e.touch()
+	return e
 }
 
-type item struct {
+type entry struct {
 	key        string
-	data       interface{}
+	content    interface{}
 	ttl        time.Duration
 	expireAt   time.Time
 	mutex      sync.Mutex
 	queueIndex int
 }
 
-// Reset the item expiration time
-func (item *item) touch() {
-	item.mutex.Lock()
-	if item.ttl > 0 {
-		item.expireAt = time.Now().Add(item.ttl)
+func (e *entry) touch() {
+	e.mutex.Lock()
+	if e.ttl > 0 {
+		e.expireAt = time.Now().Add(item.ttl)
 	}
-	item.mutex.Unlock()
+	e.mutex.Unlock()
 }
 
-// Verify if the item is expired
-func (item *item) expired() bool {
-	item.mutex.Lock()
-	if item.ttl <= 0 {
-		item.mutex.Unlock()
+func (e *entry) expired() bool {
+	e.mutex.Lock()
+	if e.ttl <= 0 {
+		e.mutex.Unlock()
 		return false
 	}
-	expired := item.expireAt.Before(time.Now())
-	item.mutex.Unlock()
+	expired := e.expireAt.Before(time.Now())
+	e.mutex.Unlock()
 	return expired
 }
