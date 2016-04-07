@@ -3,32 +3,74 @@ package ttlcache
 import (
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/assert"
 )
 
-func TestItemExpired(t *testing.T) {
-	item := newItem("key", "value", (time.Duration(100) * time.Millisecond))
-	assert.Equal(t, item.expired(), false, "Expected item to not be expired")
+func TestEntryExpired(t *testing.T) {
+	e := newEntry("key", "value", (time.Duration(100) * time.Millisecond))
+	if e.expired() {
+		t.Error("Expected item to not be expired")
+	}
+
 	<-time.After(200 * time.Millisecond)
-	assert.Equal(t, item.expired(), true, "Expected item to be expired once time has passed")
+
+	if !e.expired() {
+		t.Error("Expected item to be expired")
+	}
 }
 
-func TestItemTouch(t *testing.T) {
-	item := newItem("key", "value", (time.Duration(100) * time.Millisecond))
-	oldExpireAt := item.expireAt
+func TestEntryTouch(t *testing.T) {
+	e := newEntry("key", "value", (time.Duration(100) * time.Millisecond))
+	oldExpireAt := e.expireAt
 	<-time.After(50 * time.Millisecond)
-	item.touch()
-	assert.NotEqual(t, oldExpireAt, item.expireAt, "Expected dates to be different")
+	e.touch()
+
+	if oldExpireAt == e.expireAt {
+		t.Error("Expected dates to be different")
+	}
+
 	<-time.After(150 * time.Millisecond)
-	assert.Equal(t, item.expired(), true, "Expected item to be expired")
-	item.touch()
+
+	if !e.expired() {
+		t.Error("Expected item to be expired")
+	}
+
+	e.touch()
 	<-time.After(50 * time.Millisecond)
-	assert.Equal(t, item.expired(), false, "Expected item to not be expired")
+
+	if e.expired() {
+		t.Error("Expected item to not be expired")
+	}
 }
 
-func TestItemWithoutExpiration(t *testing.T) {
-	item := newItem("key", "value", ItemNotExpire)
+func TestEntryWithoutExpiration(t *testing.T) {
+	e := newEntry("key", "value", 0)
 	<-time.After(50 * time.Millisecond)
-	assert.Equal(t, item.expired(), false, "Expected item to not be expired")
+	if e.expired() {
+		t.Error("Expected item to not be expired")
+	}
+}
+
+func BenchmarkEntryNew(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		newEntry("key", "value", -1)
+	}
+}
+
+func BenchmarkEntryTouch(b *testing.B) {
+	b.ReportAllocs()
+	e := newEntry("key", "value", -1)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		e.touch()
+	}
+}
+
+func BenchmarkEntryExpired(b *testing.B) {
+	b.ReportAllocs()
+	e := newEntry("key", "value", -1)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		e.expired()
+	}
 }

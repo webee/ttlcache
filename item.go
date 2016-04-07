@@ -5,34 +5,28 @@ import (
 	"time"
 )
 
-const (
-	entryNotExpire           time.Duration = -1
-	entryExpireWithGlobalTTL time.Duration = 0
-)
-
 func newEntry(key string, content interface{}, ttl time.Duration) *entry {
 	e := &entry{
+		key:     key,
 		content: content,
 		ttl:     ttl,
-		key:     key,
 	}
 	e.touch()
 	return e
 }
 
 type entry struct {
-	key        string
-	content    interface{}
-	ttl        time.Duration
-	expireAt   time.Time
-	mutex      sync.Mutex
-	queueIndex int
+	key      string
+	content  interface{}
+	ttl      time.Duration
+	expireAt time.Time
+	mutex    sync.Mutex
 }
 
 func (e *entry) touch() {
 	e.mutex.Lock()
 	if e.ttl > 0 {
-		e.expireAt = time.Now().Add(item.ttl)
+		e.expireAt = time.Now().Add(e.ttl)
 	}
 	e.mutex.Unlock()
 }
