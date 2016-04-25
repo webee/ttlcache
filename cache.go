@@ -13,7 +13,7 @@ type expireCallback func(key string, value interface{})
 
 // Cache is a synchronized map of items that can auto-expire once stale
 type Cache struct {
-	mutex                  sync.Mutex
+	sync.RWMutex
 	ttl                    time.Duration
 	items                  map[string]*item
 	expireCallback         expireCallback
@@ -25,11 +25,11 @@ type Cache struct {
 }
 
 func (cache *Cache) getItem(key string) (*item, bool) {
-	cache.mutex.Lock()
+	cache.RLock()
+	defer cache.RUnlock()
 
 	item, exists := cache.items[key]
 	if !exists || item.expired() {
-		cache.mutex.Unlock()
 		return nil, false
 	}
 
@@ -43,14 +43,13 @@ func (cache *Cache) getItem(key string) (*item, bool) {
 		cache.expirationNotificationTrigger(item)
 	}
 
-	cache.mutex.Unlock()
 	return item, exists
 }
 
 func (cache *Cache) startExpirationProcessing() {
 	for {
 		var sleepTime time.Duration
-		cache.mutex.Lock()
+		cache.Lock()
 		if cache.priorityQueue.Len() > 0 {
 			if cache.ttl > 0 && time.Now().Add(cache.ttl).Before(cache.priorityQueue.items[0].expireAt) {
 				sleepTime = cache.ttl
@@ -64,7 +63,7 @@ func (cache *Cache) startExpirationProcessing() {
 		}
 
 		cache.expirationTime = time.Now().Add(sleepTime)
-		cache.mutex.Unlock()
+		cache.Unlock()
 
 		select {
 		case <-time.After(cache.expirationTime.Sub(time.Now())):
@@ -72,11 +71,11 @@ func (cache *Cache) startExpirationProcessing() {
 				continue
 			}
 
-			cache.mutex.Lock()
+			cache.Lock()
 			item := cache.priorityQueue.items[0]
 
 			if !item.expired() {
-				cache.mutex.Unlock()
+				cache.Unlock()
 				continue
 			}
 
@@ -84,14 +83,14 @@ func (cache *Cache) startExpirationProcessing() {
 				if !cache.checkExpireCallback(item.key, item.data) {
 					item.touch()
 					cache.priorityQueue.update(item)
-					cache.mutex.Unlock()
+					cache.Unlock()
 					continue
 				}
 			}
 
 			cache.priorityQueue.remove(item)
 			delete(cache.items, item.key)
-			cache.mutex.Unlock()
+			cache.Unlock()
 
 			if cache.expireCallback != nil {
 				cache.expireCallback(item.key, item.data)
@@ -116,7 +115,7 @@ func (cache *Cache) Set(key string, data interface{}) {
 // SetWithTTL is a thread-safe way to add new items to the map with individual ttl
 func (cache *Cache) SetWithTTL(key string, data interface{}, ttl time.Duration) {
 	item, exists := cache.getItem(key)
-	cache.mutex.Lock()
+	cache.Lock()
 
 	if exists {
 		item.data = data
@@ -140,7 +139,7 @@ func (cache *Cache) SetWithTTL(key string, data interface{}, ttl time.Duration) 
 		}
 		cache.expirationNotificationTrigger(item)
 	}
-	cache.mutex.Unlock()
+	cache.Unlock()
 	if !exists && cache.newItemCallback != nil {
 		cache.newItemCallback(key, data)
 	}
@@ -156,33 +155,34 @@ func (cache *Cache) Get(key string) (interface{}, bool) {
 	return nil, false
 }
 
+// Remove remove a key.
 func (cache *Cache) Remove(key string) bool {
-	cache.mutex.Lock()
+	cache.Lock()
+	defer cache.Unlock()
 	object, exists := cache.items[key]
 	if !exists {
-		cache.mutex.Unlock()
 		return false
 	}
 	delete(cache.items, object.key)
 	cache.priorityQueue.remove(object)
-	cache.mutex.Unlock()
 
 	return true
 }
 
 // Count returns the number of items in the cache
 func (cache *Cache) Count() int {
-	cache.mutex.Lock()
+	cache.RLock()
+	defer cache.RUnlock()
 	length := len(cache.items)
-	cache.mutex.Unlock()
 	return length
 }
 
+// SetTTL set the global ttl.
 func (cache *Cache) SetTTL(ttl time.Duration) {
-	cache.mutex.Lock()
+	cache.Lock()
+	defer cache.Unlock()
 	cache.ttl = ttl
 	cache.expirationNotification <- true
-	cache.mutex.Unlock()
 }
 
 // SetExpirationCallback sets a callback that will be called when an item expires
